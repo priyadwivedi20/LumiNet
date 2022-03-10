@@ -730,6 +730,7 @@ class Ptcompute():
                 inputs=inputs.cpu()
             np.shape(outputs)
             np.shape(targets)
+            outputs = outputs.detach().numpy()
             batch_df_temp = pd.DataFrame(outputs)
             Xcols = ['CNN_'+str(j) for j in batch_df_temp.columns]
             batch_df_temp.columns = Xcols

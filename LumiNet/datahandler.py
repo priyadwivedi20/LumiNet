@@ -20,10 +20,10 @@ class Datahandler():
             'workdir':      workdir,
             'ELfolderpath': ELfolderpath,
             'IVfile':       IVfile,
-            'figures':      workdir+"figures\\",
-            'models':       workdir+"models\\",
-            'traces':       workdir+"traces\\",
-            'outputs':      workdir+"outputs\\",
+            'figures':      workdir+"figures/",
+            'models':       workdir+"models/",
+            'traces':       workdir+"traces/",
+            'outputs':      workdir+"outputs/",
             'Matchfile':    workdir+"match.csv",
         }
         for key, value in self.pathDic.items():
@@ -128,6 +128,7 @@ class Datahandler():
         ohe = OneHotEncoder(sparse=False,categories='auto')
         self.matchDf['Bins'] = pd.cut(self.matchDf[binCol],binTab,include_lowest=True)
         self.matchDf['Labels'],self.binLevels = pd.factorize(self.matchDf['Bins'],sort=True)
+        self.matchDf['Bins'] = self.matchDf['Bins'].astype('str')
         self.matchDf['OHE']=[elt for elt in ohe.fit_transform(self.matchDf['Labels'].values.reshape(-1,1))]
         self.ohe = ohe
         self.matchDf.to_csv(self.pathDic['Matchfile'],encoding='utf-8', index=False)

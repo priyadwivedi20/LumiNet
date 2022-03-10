@@ -20,7 +20,7 @@ from sklearn.neural_network import MLPRegressor
 #///////////////////////////////////////////
 # %%--  Loading models
 Obj = [ #Select one
-    LoadObj("Models\\","LumiNet_VGG_RF_Eff"), # Efficiency predictor
+    LoadObj("Models/","LumiNet_VGG_RF_Eff_noML"), # Efficiency predictor
     # LoadObj("Models\\","LumiNet_VGG_RF_Isc"), # Current predictor
     # LoadObj("Models\\","LumiNet_VGG_RF_Voc"), # Voltage predictor
     ][0]
@@ -102,10 +102,12 @@ Use print_dic to see the nested structure of the loaded dictionary object which 
 #  </subcell>
 TF_model = Obj['CNN']['model_classifier']
 # %%-
+# print(Obj['PARAMETERS']['ML_FRAC'])
+
 # %%--  Parameters
 PARAMETERS = Obj['PARAMETERS'] # Use loaded parameters as default. Explore PARAMETERS to edit
 PARAMETERS['NAME']="FEATURE EXTRACTION TEST"
-PARAMETERS['SAVEFOLDER']="TEST\\"
+PARAMETERS['SAVEFOLDER']="TEST/"
 PARAMETERS['TARGET_COL']="Eff"
 LOAD_FILE="test.csv" #Should have a "path" column and a TARGET_COL column
 PARAMETERS['CNN']['TRANSFORM_AUG']=transforms.Compose([
@@ -122,6 +124,7 @@ PARAMETERS['CNN']['TRANSFORM']=transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize([0.5],[0.5])
 ])
+PARAMETERS['ML']['MODEL']=('RandomForest',RandomForestRegressor())
 # %%-
 
 #\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
@@ -211,6 +214,8 @@ ML_df = pd.DataFrame()
 CNN_df = pd.DataFrame()
 print("\t Processing... ")
 All_df = dataset.matchDf.copy(deep=True)
+dataset.matchDf = dataset.matchDf.loc[dataset.matchDf['TestDate'] == '24/11/2021'].copy(deep=True)
+
 ML_df, CNN_df = dataset.splitData(mlFrac=PARAMETERS['ML_FRAC'],randomSeed=PARAMETERS['RANDOM_SEED'])
 ML_df=ML_df.sample(frac=1, random_state=PARAMETERS['RANDOM_SEED']) # Shuffle
 CNN_df=CNN_df.sample(frac=1, random_state=PARAMETERS['RANDOM_SEED']) # Shuffle
@@ -219,8 +224,10 @@ print("Done\n")
 dataset.matchDf=CNN_df.copy(deep=True)
 Ptmodel = Ptcompute(dataset,TF_model,name=PARAMETERS['NAME']+"_"+PARAMETERS['CNN']['MODEL'],save=PARAMETERS['SAVE'])
 Ptmodel.subset_size = PARAMETERS['CNN']['SUBSET_SIZE']
-Ptmodel.batch_size = PARAMETERS['CNN']['BATCH_SIZE']
-Ptmodel.split_size = PARAMETERS['CNN']['SPLIT_FRAC']
+# Ptmodel.batch_size = PARAMETERS['CNN']['BATCH_SIZE']
+Ptmodel.batch_size = 32
+# Ptmodel.split_size = PARAMETERS['CNN']['SPLIT_FRAC']
+Ptmodel.split_size = 0.01
 Ptmodel.n_epochs = PARAMETERS['CNN']['N_EPOCHS']
 Ptmodel.CM_fz = PARAMETERS['CNN']['CM_FZ']
 Ptmodel.initTraining()
@@ -239,11 +246,12 @@ CNN = Ptcompute.freezeCNN(PARAMETERS['CNN']['MODEL'],Ptmodel.model)
 Xcols, ML_df = Ptcompute.extractFeature(CNN,ML_df,PARAMETERS['CNN']['TRANSFORM'],batch_size=PARAMETERS['CNN']['BATCH_SIZE'])
 # %%-
 # %%--  Machine learning regression
-dataset.matchDf=ML_df.copy(deep=True)
+dataset.matchDf=ML_df.loc[ML_df[targetCol]>19].copy(deep=True)
 Skmodel = Skcompute(dataset,PARAMETERS['ML']['MODEL'][1],name=PARAMETERS['NAME']+"_"+PARAMETERS['ML']['MODEL'][0], save=PARAMETERS['SAVE'])
 Skmodel.initTraining()
 Skmodel.subset_size = PARAMETERS['ML']['SUBSET_SIZE']
-Skmodel.split_size = PARAMETERS['ML']['SPLIT_FRAC']
+# Skmodel.split_size = PARAMETERS['ML']['SPLIT_FRAC']
+Skmodel.split_size = 0.05
 Skmodel.trainModel(
     Xcols=Xcols,
     Ycol=targetCol,
@@ -252,3 +260,25 @@ Skmodel.trainModel(
     comment=""
 )
 # %%-
+
+# %% -- Testing
+ML_df = All_df.loc[All_df['TestDate'] == '25/11/2021'].copy(deep=True)
+Xcols, ML_df = Ptcompute.extractFeature(CNN,ML_df,PARAMETERS['CNN']['TRANSFORM'],batch_size=PARAMETERS['CNN']['BATCH_SIZE'])
+dataset.matchDf=ML_df.loc[ML_df[targetCol]>19].copy(deep=True)
+X_test = dataset.matchDf[Xcols]
+Y_pred = Skmodel.model.predict(dataset.matchDf[Xcols])
+Y_test = dataset.matchDf[targetCol]
+
+# %% Figures
+import matplotlib.pyplot as plt
+plt.figure(figsize=(6,6))
+plt.title("Efficiency Prediction for 25.11.2021")
+ax1 = plt.gca()
+ax1.set_xlabel('Actual value')
+ax1.set_ylabel('Predicted value')
+ax1.scatter(Y_test, Y_pred, c="C0", marker=".", label=Skmodel.name+" -#"+str(Skmodel.trainNum))
+ax1.annotate(r"R$^2$=%.3F"%(Skmodel.model.score(X_test,Y_test)), xy=(0.05,0.90), xycoords='axes fraction')
+ax1.plot([np.min([np.min(Y_test),np.min(Y_pred)]),np.max([np.max(Y_test),np.max(Y_pred)])],[np.min([np.min(Y_test),np.min(Y_pred)]),np.max([np.max(Y_test),np.max(Y_pred)])], linewidth=1 ,linestyle="--",c="C3", label="y=x")
+if Skmodel.save: plt.savefig(Skmodel.figurefile,transparent=True,bbox_inches='tight')
+plt.show()
+plt.close()

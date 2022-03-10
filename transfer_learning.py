@@ -1,5 +1,7 @@
 # %%--  Import modules
 #   Package classes
+# %%
+import os
 from LumiNet import *
 from LumiNet import SaveObj, LoadObj, print_dic
 #   Other packages
@@ -14,13 +16,16 @@ from sklearn.svm import SVR
 from sklearn.linear_model import LogisticRegression, Lasso, LinearRegression, ElasticNet, Ridge
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.neural_network import MLPRegressor
+# %%
 # %%-
+# path = '/mnt/data-r6/priya/projects/el2iv/LumiNet'
+# os.chdir(path)
 #\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 #---    Set-up
 #///////////////////////////////////////////
 # %%--  Loading models
 Obj = [ #Select one
-    LoadObj("Models\\","LumiNet_VGG_RF_Eff"), # Efficiency predictor
+    LoadObj("Models/","LumiNet_VGG_RF_Eff_noML"), # Efficiency predictor
     # LoadObj("Models\\","LumiNet_VGG_RF_Isc"), # Current predictor
     # LoadObj("Models\\","LumiNet_VGG_RF_Voc"), # Voltage predictor
     ][0]
@@ -105,9 +110,9 @@ TF_model = Obj['CNN']['model_extractor']
 # %%--  Parameters
 PARAMETERS = Obj['PARAMETERS'] # Use loaded parameters as default. Explore PARAMETERS to edit
 PARAMETERS['NAME']="FEATURE EXTRACTION TEST"
-PARAMETERS['SAVEFOLDER']="TEST\\"
+PARAMETERS['SAVEFOLDER']="TEST/"
 PARAMETERS['TARGET_COL']="Eff"
-LOAD_FILE="test.csv" #Should have a "path" column and a TARGET_COL column
+LOAD_FILE="test_sub_sub.csv" #Should have a "path" column and a TARGET_COL column
 PARAMETERS['CNN']['TRANSFORM_AUG']=transforms.Compose([
     transforms.Resize((PARAMETERS['CNN']['IMAGE_SIZE'],PARAMETERS['CNN']['IMAGE_SIZE'])),
     transforms.Grayscale(num_output_channels = 3),
@@ -122,6 +127,7 @@ PARAMETERS['CNN']['TRANSFORM']=transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize([0.5],[0.5])
 ])
+PARAMETERS['ML']['MODEL']=('RandomForest',RandomForestRegressor())
 # %%-
 
 #\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
@@ -151,6 +157,7 @@ if PARAMETERS['CALCULATE_DATASET_STAT']:
     dataset_stat = pd.DataFrame(tab)
     dataset_stat.columns=columns
     print(dataset_stat.to_string())
+
     if PARAMETERS['SAVE']: dataset_stat.to_csv(PARAMETERS['SAVEFOLDER']+"datasetStatistic_"+datetime.datetime.now().strftime("%Y-%m-%d-%H-%M")+"_"+PARAMETERS['TARGET_COL']+".csv", index=False)
     print("Done\n")
 #  </subcell>
@@ -185,7 +192,8 @@ elif PARAMETERS['TARGET_BIN'] == "4_QUANTILES" :
     mad = df[targetCol].mad()
     binTab =[-99,Q1,med,Q3,max]
 elif PARAMETERS['TARGET_BIN'] == "CUSTOM" :
-    binTab=[-np.infty]+PARAMETERS['TARGET_BIN_CUSTOM']
+    # binTab=[-np.infty]+PARAMETERS['TARGET_BIN_CUSTOM']
+    binTab=[-99]+PARAMETERS['TARGET_BIN_CUSTOM']
     if min < np.min(binTab):
         print("\t Warning - dataset minimum lower than custom bin min")
         if not PARAMETERS['TARGET_BIN_CUSTOM_CLIP']: binTab[0]=min
@@ -195,7 +203,6 @@ elif PARAMETERS['TARGET_BIN'] == "CUSTOM" :
 else:
     print("\t Warning - No defined binning strategy")
     binTab = []
-
 nClass = len(binTab)-1
 PARAMETERS['CNN']['NCLASS']=nClass
 dataset.addLabels(targetCol,binTab)
@@ -206,9 +213,11 @@ dataset.plotCol(targetCol,save=PARAMETERS['SAVE'])
 #  </subcell>
 # %%-
 # %%--  Feature extraction
+# dataset.matchDf=dataset.matchDf.head(1000).copy(deep=True)
 Xcols, dataset.matchDf = Ptcompute.extractFeature(TF_model,dataset.matchDf,PARAMETERS['CNN']['TRANSFORM'],batch_size=PARAMETERS['CNN']['BATCH_SIZE'])
 # %%-
 # %%--  Machine learning regression
+dataset.matchDf=dataset.matchDf.loc[dataset.matchDf[targetCol]>19].copy(deep=True)
 Skmodel = Skcompute(dataset,PARAMETERS['ML']['MODEL'][1],name=PARAMETERS['NAME']+"_"+PARAMETERS['ML']['MODEL'][0], save=PARAMETERS['SAVE'])
 Skmodel.initTraining()
 Skmodel.subset_size = PARAMETERS['ML']['SUBSET_SIZE']
@@ -221,3 +230,4 @@ Skmodel.trainModel(
     comment=""
 )
 # %%-
+# print(Skmodel.model.predict(dataset.matchDf[Xcols]))
