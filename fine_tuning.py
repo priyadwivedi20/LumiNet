@@ -23,7 +23,7 @@ Obj = [ #Select one
     LoadObj("Models/","LumiNet_VGG_RF_Eff_noML"), # Efficiency predictor
     # LoadObj("Models\\","LumiNet_VGG_RF_Isc"), # Current predictor
     # LoadObj("Models\\","LumiNet_VGG_RF_Voc"), # Voltage predictor
-    ][0]
+][0]
 #  <subcell>    Object layout
 #print_dic(Obj)
 '''
@@ -101,6 +101,7 @@ Use print_dic to see the nested structure of the loaded dictionary object which 
 '''
 #  </subcell>
 TF_model = Obj['CNN']['model_classifier']
+Obj['TIMESTAMP']=datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 # %%-
 # print(Obj['PARAMETERS']['ML_FRAC'])
 
@@ -230,6 +231,7 @@ Ptmodel.batch_size = 32
 Ptmodel.split_size = 0.01
 Ptmodel.n_epochs = PARAMETERS['CNN']['N_EPOCHS']
 Ptmodel.CM_fz = PARAMETERS['CNN']['CM_FZ']
+Ptmodel.timestamp=Obj['TIMESTAMP']
 Ptmodel.initTraining()
 Ptmodel.trainModel(
     Ycol="Labels",
@@ -238,17 +240,24 @@ Ptmodel.trainModel(
     randomSeed=PARAMETERS['RANDOM_SEED'],
     split_randomSeed=PARAMETERS['RANDOM_SEED'],
     comment=""
-    )
+)
+Obj['CNN']['results'] = Ptmodel.classResults[0]
+Obj['CNN']['vocab'] = Ptmodel.vocab
+Obj['CNN']['CM'] = Ptmodel.CM
+Obj['CNN']['lossPlots']=Ptmodel.lossPlots
+Obj['CNN']['model_classifier'] = Ptmodel.model
 # %%-
 
 # %%--  Feature extraction
 CNN = Ptcompute.freezeCNN(PARAMETERS['CNN']['MODEL'],Ptmodel.model)
+Obj['CNN']['model_extractor']=CNN
 Xcols, ML_df = Ptcompute.extractFeature(CNN,ML_df,PARAMETERS['CNN']['TRANSFORM'],batch_size=PARAMETERS['CNN']['BATCH_SIZE'])
 # %%-
 # %%--  Machine learning regression
 dataset.matchDf=ML_df.loc[ML_df[targetCol]>19].copy(deep=True)
 Skmodel = Skcompute(dataset,PARAMETERS['ML']['MODEL'][1],name=PARAMETERS['NAME']+"_"+PARAMETERS['ML']['MODEL'][0], save=PARAMETERS['SAVE'])
 Skmodel.initTraining()
+Skmodel.timestamp=Obj['TIMESTAMP']
 Skmodel.subset_size = PARAMETERS['ML']['SUBSET_SIZE']
 # Skmodel.split_size = PARAMETERS['ML']['SPLIT_FRAC']
 Skmodel.split_size = 0.05
@@ -259,6 +268,12 @@ Skmodel.trainModel(
     randomSeed=PARAMETERS['RANDOM_SEED'],
     comment=""
 )
+Obj['ML']['results']=Skmodel.regResults[0]
+Obj['ML']['model']=Skmodel.model
+# %%-
+# %%--  Save model
+Obj['PARAMETERS']=PARAMETERS
+if PARAMETERS['SAVE']: SaveObj(Obj,PARAMETERS['SAVEFOLDER']+"models\\",Obj['TIMESTAMP']+"_"+PARAMETERS['NAME'])
 # %%-
 
 # %% -- Testing
